@@ -168,6 +168,13 @@ public struct ChatCompletionChunk: Decodable, Sendable {
                 case reasoningTokens = "reasoning_tokens"
                 case rejectedPredictionTokens = "rejected_prediction_tokens"
             }
+
+            public init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.acceptedPredictionTokens = try container.decodeIfPresent(Int.self, forKey: .acceptedPredictionTokens)
+                self.rejectedPredictionTokens = try container.decodeIfPresent(Int.self, forKey: .rejectedPredictionTokens)
+                self.reasoningTokens = try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
+            }
         }
         
         public struct PromptTokensDetails: Decodable, Sendable {
