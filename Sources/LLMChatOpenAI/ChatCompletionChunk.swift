@@ -145,7 +145,10 @@ public struct ChatCompletionChunk: Decodable, Sendable {
         
         /// Total number of tokens used in the request (prompt + completion).
         public let totalTokens: Int?
-        
+
+        /// The cost of the request in USD, as reported by OpenRouter usage accounting.
+        public let cost: Double?
+
         /// Breakdown of tokens used in a completion.
         public let completionTokensDetails: CompletionTokensDetails?
         
@@ -190,6 +193,7 @@ public struct ChatCompletionChunk: Decodable, Sendable {
             case completionTokens = "completion_tokens"
             case promptTokens = "prompt_tokens"
             case totalTokens = "total_tokens"
+            case cost
             case completionTokensDetails = "completion_tokens_details"
             case promptTokensDetails = "prompt_tokens_details"
         }
