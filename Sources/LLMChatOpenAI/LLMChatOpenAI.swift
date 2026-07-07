@@ -43,6 +43,20 @@ public struct LLMChatOpenAI: Sendable {
         
         return defaultHeaders
     }
+    
+    private var speechEndpoint: URL {
+        var url = endpoint
+        
+        if url.lastPathComponent == "completions" {
+            url.deleteLastPathComponent()
+        }
+        
+        if url.lastPathComponent == "chat" {
+            url.deleteLastPathComponent()
+        }
+        
+        return url.appendingPathComponent("audio").appendingPathComponent("speech")
+    }
 }
 
 // MARK: - Send
@@ -123,6 +137,26 @@ public extension LLMChatOpenAI {
     }
 }
 
+// MARK: - Speech
+public extension LLMChatOpenAI {
+    /// Generates speech audio from the given text.
+    ///
+    /// - Parameters:
+    ///   - model: The model to use for speech generation.
+    ///   - input: The text to generate audio for.
+    ///   - voice: The voice to use when generating the audio.
+    ///   - responseFormat: The format of the generated audio. Defaults to `mp3`.
+    ///
+    /// - Returns: A `Data` object that contains the raw audio bytes.
+    ///
+    /// - Note: The request is sent to the `/audio/speech` path relative to the configured `endpoint` base URL.
+    func speech(model: String, input: String, voice: String, responseFormat: String = "mp3") async throws -> Data {
+        let body = SpeechRequestBody(model: model, input: input, voice: voice, responseFormat: responseFormat)
+        
+        return try await performSpeechRequest(with: body)
+    }
+}
+
 // MARK: - Helpers
 private extension LLMChatOpenAI {
     func createRequest(for url: URL, with body: RequestBody) throws -> URLRequest {
@@ -159,6 +193,40 @@ private extension LLMChatOpenAI {
             throw LLMChatOpenAIError.cancelled
         } catch let error as DecodingError {
             throw LLMChatOpenAIError.decodingError(error)
+        } catch let error as LLMChatOpenAIError {
+            throw error
+        } catch {
+            throw LLMChatOpenAIError.networkError(error)
+        }
+    }
+    
+    func performSpeechRequest(with body: SpeechRequestBody) async throws -> Data {
+        do {
+            var request = URLRequest(url: speechEndpoint)
+            request.httpMethod = "POST"
+            request.httpBody = try JSONEncoder().encode(body)
+            request.allHTTPHeaderFields = allHeaders
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw LLMChatOpenAIError.serverError(statusCode: 0, message: response.description)
+            }
+            
+            // Check for API errors first, as they might come with 200 status
+            if let errorResponse = try? JSONDecoder().decode(ChatCompletionError.self, from: data) {
+                throw LLMChatOpenAIError.serverError(statusCode: httpResponse.statusCode, message: errorResponse.error.message)
+            }
+            
+            guard 200...299 ~= httpResponse.statusCode else {
+                throw LLMChatOpenAIError.serverError(statusCode: httpResponse.statusCode, message: response.description)
+            }
+            
+            return data
+        } catch is CancellationError {
+            throw LLMChatOpenAIError.cancelled
+        } catch let error as URLError where error.code == .cancelled {
+            throw LLMChatOpenAIError.cancelled
         } catch let error as LLMChatOpenAIError {
             throw error
         } catch {
@@ -277,6 +345,18 @@ private extension LLMChatOpenAI {
         enum CodingKeys: String, CodingKey {
             case stream, model, models, route, messages
             case streamOptions = "stream_options"
+        }
+    }
+    
+    struct SpeechRequestBody: Encodable {
+        let model: String
+        let input: String
+        let voice: String
+        let responseFormat: String
+        
+        enum CodingKeys: String, CodingKey {
+            case model, input, voice
+            case responseFormat = "response_format"
         }
     }
     
